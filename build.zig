@@ -1198,6 +1198,8 @@ pub fn build(b: *std.Build) void {
                 "src/haptic/hidapi/SDL_hidapihaptic.c",
                 "src/haptic/hidapi/SDL_hidapihaptic_lg4ff.c",
                 "src/joystick/apple/SDL_mfijoystick.m",
+                "src/joystick/darwin/SDL_iokitjoystick.c",
+                "src/haptic/darwin/SDL_syshaptic.c",
                 "src/power/macos/SDL_syspower.c",
                 "src/locale/macos/SDL_syslocale.m",
                 "src/time/unix/SDL_systime.c",
