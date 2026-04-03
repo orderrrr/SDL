@@ -47,10 +47,26 @@ pub fn build(b: *std.Build) void {
         "emscripten_pthreads",
         "Build with pthreads support when targeting Emscripten (default: false)",
     ) orelse false;
-    const build_config_overrides = b.option(
+    // Undocumented "advanced" options for specialized use cases below
+    const build_config_h_overrides = b.option(
         []const []const u8,
         "build_config_h_overrides",
         "Override 'SDL_build_config.h' entries (e.g. '-DHAVE_SIN=1', '-UHAVE_COS')",
+    );
+    var system_include_path = b.option(
+        std.Build.LazyPath,
+        "system_include_path",
+        "System header search path for cross-compiling",
+    );
+    var system_framework_path = b.option(
+        std.Build.LazyPath,
+        "system_framework_path",
+        "System framework search path for cross-compiling",
+    );
+    var library_path = b.option(
+        std.Build.LazyPath,
+        "library_path",
+        "Library search path for cross-compiling",
     );
     const install_build_config_h = b.option(
         bool,
@@ -69,9 +85,6 @@ pub fn build(b: *std.Build) void {
     var macos = false;
     var ios = false;
     var emscripten = false;
-    var system_include_path: ?std.Build.LazyPath = null;
-    var system_framework_path: ?std.Build.LazyPath = null;
-    var library_path: ?std.Build.LazyPath = null;
     var msvc = false; // Assume mingw-w64 as the default for Windows
     var musl = false; // Assume glibc as the default for Linux
     switch (target.result.os.tag) {
@@ -89,32 +102,22 @@ pub fn build(b: *std.Build) void {
         .macos => {
             macos = true;
             if (b.sysroot) |sysroot| {
-                system_include_path = .{ .cwd_relative = b.pathJoin(&.{ sysroot, "usr/include" }) };
-                system_framework_path = .{ .cwd_relative = b.pathJoin(&.{ sysroot, "System/Library/Frameworks" }) };
-                library_path = .{ .cwd_relative = "/usr/lib" }; // ???
-            } else if (!target.query.isNative()) {
-                std.log.err("'--sysroot' or '-Dapple_sysroot' is required when building SDL for non-native macOS targets", .{});
-                std.process.exit(1);
+                system_include_path = system_include_path orelse .{ .cwd_relative = b.pathJoin(&.{ sysroot, "usr/include" }) };
+                system_framework_path = system_framework_path orelse .{ .cwd_relative = b.pathJoin(&.{ sysroot, "System/Library/Frameworks" }) };
+                library_path = library_path orelse .{ .cwd_relative = "/usr/lib" }; // ???
             }
-        },
-        .ios => {
-            ios = true;
-            const sysroot = provided_sysroot orelse b.sysroot;
-            if (sysroot) |s| {
-                system_include_path = .{ .cwd_relative = b.pathJoin(&.{ s, "usr/include" }) };
-                system_framework_path = .{ .cwd_relative = b.pathJoin(&.{ s, "System/Library/Frameworks" }) };
-                library_path = .{ .cwd_relative = "/usr/lib" }; // ???
-            } else if (!target.query.isNative()) {
-                std.log.err("'--sysroot' or '-Dapple_sysroot' is required when building SDL for iOS", .{});
+            if (!target.query.isNative() and (system_include_path == null or system_framework_path == null or library_path == null)) {
+                std.log.err("'--sysroot' (or '-Dsystem_include_path', '-Dsystem_framework_path' and '-Dlibrary_path') is required when building SDL for non-native macOS targets", .{});
                 std.process.exit(1);
             }
         },
         .emscripten => {
             emscripten = true;
             if (b.sysroot) |sysroot| {
-                system_include_path = .{ .cwd_relative = b.pathJoin(&.{ sysroot, "include" }) };
-            } else {
-                std.log.err("'--sysroot' is required when building SDL for Emscripten", .{});
+                system_include_path = system_include_path orelse .{ .cwd_relative = b.pathJoin(&.{ sysroot, "include" }) };
+            }
+            if (system_include_path == null) {
+                std.log.err("'--sysroot' (or '-Dsystem_include_path') is required when building SDL for Emscripten", .{});
                 std.process.exit(1);
             }
         },
@@ -598,7 +601,7 @@ pub fn build(b: *std.Build) void {
         });
     };
 
-    if (build_config_overrides) |overrides| for (overrides) |override| {
+    if (build_config_h_overrides) |overrides| for (overrides) |override| {
         if (std.mem.startsWith(u8, override, "-D")) {
             // TODO: Change to std.mem.cut after 0.16
             var it = std.mem.splitScalar(u8, override[2..], '=');
@@ -667,7 +670,7 @@ pub fn build(b: *std.Build) void {
         sdl_mod.addCMacro("_CRT_SECURE_NO_DEPRECATE", "1");
         sdl_mod.addCMacro("_CRT_NONSTDC_NO_DEPRECATE", "1");
         sdl_mod.addCMacro("_CRT_SECURE_NO_WARNINGS", "1");
-        if (@import("builtin").zig_version.major <= 15) {
+        if (@import("builtin").zig_version.major <= 15) { // TODO: Remove after 0.16
             // Fix "duplicate symbol" errors by redefining a problematic weak symbol definition in
             // wchar.h which was introduced in Windows SDK version 10.0.26100.0 and which LLVM 20
             // doesn't understand how to handle.
