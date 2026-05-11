@@ -575,6 +575,7 @@ pub fn build(b: *std.Build) void {
             .SDL_VIDEO_VITA_PIB = false,
             .SDL_VIDEO_VITA_PVR = false,
             .SDL_VIDEO_VITA_PVR_OGL = false,
+            .SDL_EMSCRIPTEN_PERSISTENT_PATH_STRING = null,
             // Temporarily set to a lower version as >= 1.10.0 is not yet widely available.
             // TODO: Uncomment after Ubuntu 26.04 LTS has been released?
             .SDL_XKBCOMMON_VERSION_MAJOR = if (linux_deps_values != null) @as(i64, 1) else null,
@@ -603,10 +604,8 @@ pub fn build(b: *std.Build) void {
 
     if (build_config_h_overrides) |overrides| for (overrides) |override| {
         if (std.mem.startsWith(u8, override, "-D")) {
-            // TODO: Change to std.mem.cut after 0.16
-            var it = std.mem.splitScalar(u8, override[2..], '=');
-            const name, const value = .{ it.first(), if (it.peek() != null) it.rest() else "1" };
-            build_config_h.values.put(name, .{ .ident = value }) catch @panic("OOM");
+            const name, const value = std.mem.cutScalar(u8, override[2..], '=') orelse .{ override[2..], "1" };
+            build_config_h.addIdent(name, value);
         } else if (std.mem.startsWith(u8, override, "-U")) {
             _ = build_config_h.values.swapRemove(override[2..]);
         } else {
@@ -670,12 +669,6 @@ pub fn build(b: *std.Build) void {
         sdl_mod.addCMacro("_CRT_SECURE_NO_DEPRECATE", "1");
         sdl_mod.addCMacro("_CRT_NONSTDC_NO_DEPRECATE", "1");
         sdl_mod.addCMacro("_CRT_SECURE_NO_WARNINGS", "1");
-        if (@import("builtin").zig_version.major <= 15) { // TODO: Remove after 0.16
-            // Fix "duplicate symbol" errors by redefining a problematic weak symbol definition in
-            // wchar.h which was introduced in Windows SDK version 10.0.26100.0 and which LLVM 20
-            // doesn't understand how to handle.
-            sdl_mod.addCMacro("_Avx2WmemEnabledWeakValue", "_Avx2WmemEnabled");
-        }
     }
     if (emscripten and emscripten_pthreads) {
         sdl_mod.addCMacro("__EMSCRIPTEN_PTHREADS__", "1");
@@ -1154,6 +1147,158 @@ pub fn build(b: *std.Build) void {
                 "src/video/uikit/SDL_uikitwindow.m",
             },
         });
+    }
+
+    if (linux) {
+        sdl_mod.addCSourceFiles(.{
+            .flags = sdl_c_flags.items,
+            .files = &.{
+                "src/audio/dummy/SDL_dummyaudio.c",
+                "src/audio/disk/SDL_diskaudio.c",
+                "src/camera/dummy/SDL_camera_dummy.c",
+                "src/loadso/dlopen/SDL_sysloadso.c",
+                "src/joystick/virtual/SDL_virtualjoystick.c",
+                "src/video/dummy/SDL_nullevents.c",
+                "src/video/dummy/SDL_nullframebuffer.c",
+                "src/video/dummy/SDL_nullvideo.c",
+                "src/audio/alsa/SDL_alsa_audio.c",
+                "src/audio/jack/SDL_jackaudio.c",
+                "src/audio/pipewire/SDL_pipewire.c",
+                "src/camera/pipewire/SDL_camera_pipewire.c",
+                "src/audio/pulseaudio/SDL_pulseaudio.c",
+                "src/audio/sndio/SDL_sndioaudio.c",
+                "src/video/x11/SDL_x11clipboard.c",
+                "src/video/x11/SDL_x11dyn.c",
+                "src/video/x11/SDL_x11events.c",
+                "src/video/x11/SDL_x11framebuffer.c",
+                "src/video/x11/SDL_x11keyboard.c",
+                "src/video/x11/SDL_x11messagebox.c",
+                "src/video/x11/SDL_x11modes.c",
+                "src/video/x11/SDL_x11mouse.c",
+                "src/video/x11/SDL_x11opengl.c",
+                "src/video/x11/SDL_x11opengles.c",
+                "src/video/x11/SDL_x11pen.c",
+                "src/video/x11/SDL_x11settings.c",
+                "src/video/x11/SDL_x11shape.c",
+                "src/video/x11/SDL_x11toolkit.c",
+                "src/video/x11/SDL_x11touch.c",
+                "src/video/x11/SDL_x11video.c",
+                "src/video/x11/SDL_x11vulkan.c",
+                "src/video/x11/SDL_x11window.c",
+                "src/video/x11/SDL_x11xfixes.c",
+                "src/video/x11/SDL_x11xinput2.c",
+                "src/video/x11/SDL_x11xsync.c",
+                "src/video/x11/SDL_x11xtest.c",
+                "src/video/x11/edid-parse.c",
+                "src/video/x11/xsettings-client.c",
+                "src/video/kmsdrm/SDL_kmsdrmdyn.c",
+                "src/video/kmsdrm/SDL_kmsdrmevents.c",
+                "src/video/kmsdrm/SDL_kmsdrmmouse.c",
+                "src/video/kmsdrm/SDL_kmsdrmopengles.c",
+                "src/video/kmsdrm/SDL_kmsdrmvideo.c",
+                "src/video/kmsdrm/SDL_kmsdrmvulkan.c",
+                "src/video/wayland/SDL_waylandclipboard.c",
+                "src/video/wayland/SDL_waylandcolor.c",
+                "src/video/wayland/SDL_waylanddatamanager.c",
+                "src/video/wayland/SDL_waylanddyn.c",
+                "src/video/wayland/SDL_waylandevents.c",
+                "src/video/wayland/SDL_waylandkeyboard.c",
+                "src/video/wayland/SDL_waylandmessagebox.c",
+                "src/video/wayland/SDL_waylandmouse.c",
+                "src/video/wayland/SDL_waylandopengles.c",
+                "src/video/wayland/SDL_waylandshmbuffer.c",
+                "src/video/wayland/SDL_waylandutil.c",
+                "src/video/wayland/SDL_waylandvideo.c",
+                "src/video/wayland/SDL_waylandvulkan.c",
+                "src/video/wayland/SDL_waylandwindow.c",
+                "src/tray/unix/SDL_tray.c",
+                "src/core/unix/SDL_appid.c",
+                "src/core/unix/SDL_fribidi.c",
+                "src/core/unix/SDL_gtk.c",
+                "src/core/unix/SDL_libthai.c",
+                "src/core/unix/SDL_poll.c",
+                "src/camera/v4l2/SDL_camera_v4l2.c",
+                "src/haptic/linux/SDL_syshaptic.c",
+                "src/core/linux/SDL_dbus.c",
+                "src/core/linux/SDL_system_theme.c",
+                "src/core/linux/SDL_progressbar.c",
+                "src/core/linux/SDL_ime.c",
+                "src/core/linux/SDL_ibus.c",
+                "src/core/linux/SDL_fcitx.c",
+                "src/core/linux/SDL_udev.c",
+                "src/core/linux/SDL_evdev.c",
+                "src/core/linux/SDL_evdev_kbd.c",
+                "src/io/io_uring/SDL_asyncio_liburing.c",
+                "src/core/linux/SDL_evdev_capabilities.c",
+                "src/core/linux/SDL_threadprio.c",
+                "src/joystick/hidapi/SDL_hidapi_8bitdo.c",
+                "src/joystick/hidapi/SDL_hidapi_combined.c",
+                "src/joystick/hidapi/SDL_hidapi_flydigi.c",
+                "src/joystick/hidapi/SDL_hidapi_gamecube.c",
+                "src/joystick/hidapi/SDL_hidapi_gip.c",
+                "src/joystick/hidapi/SDL_hidapi_lg4ff.c",
+                "src/joystick/hidapi/SDL_hidapi_luna.c",
+                "src/joystick/hidapi/SDL_hidapi_ps3.c",
+                "src/joystick/hidapi/SDL_hidapi_ps4.c",
+                "src/joystick/hidapi/SDL_hidapi_ps5.c",
+                "src/joystick/hidapi/SDL_hidapi_rumble.c",
+                "src/joystick/hidapi/SDL_hidapi_shield.c",
+                "src/joystick/hidapi/SDL_hidapi_sinput.c",
+                "src/joystick/hidapi/SDL_hidapi_stadia.c",
+                "src/joystick/hidapi/SDL_hidapi_steam.c",
+                "src/joystick/hidapi/SDL_hidapi_steam_hori.c",
+                "src/joystick/hidapi/SDL_hidapi_steam_triton.c",
+                "src/joystick/hidapi/SDL_hidapi_steamdeck.c",
+                "src/joystick/hidapi/SDL_hidapi_switch.c",
+                "src/joystick/hidapi/SDL_hidapi_switch2.c",
+                "src/joystick/hidapi/SDL_hidapi_wii.c",
+                "src/joystick/hidapi/SDL_hidapi_xbox360.c",
+                "src/joystick/hidapi/SDL_hidapi_xbox360w.c",
+                "src/joystick/hidapi/SDL_hidapi_xboxone.c",
+                "src/joystick/hidapi/SDL_hidapi_zuiki.c",
+                "src/joystick/hidapi/SDL_hidapijoystick.c",
+                "src/joystick/hidapi/SDL_report_descriptor.c",
+                "src/joystick/linux/SDL_sysjoystick.c",
+                "src/haptic/hidapi/SDL_hidapihaptic.c",
+                "src/haptic/hidapi/SDL_hidapihaptic_lg4ff.c",
+                "src/thread/pthread/SDL_systhread.c",
+                "src/thread/pthread/SDL_sysmutex.c",
+                "src/thread/pthread/SDL_syscond.c",
+                "src/thread/pthread/SDL_sysrwlock.c",
+                "src/thread/pthread/SDL_systls.c",
+                "src/thread/pthread/SDL_syssem.c",
+                "src/misc/unix/SDL_sysurl.c",
+                "src/power/linux/SDL_syspower.c",
+                "src/locale/unix/SDL_syslocale.c",
+                "src/filesystem/unix/SDL_sysfilesystem.c",
+                "src/storage/generic/SDL_genericstorage.c",
+                "src/storage/steam/SDL_steamstorage.c",
+                "src/filesystem/posix/SDL_sysfsops.c",
+                "src/time/unix/SDL_systime.c",
+                "src/timer/unix/SDL_systimer.c",
+                "src/dialog/unix/SDL_unixdialog.c",
+                "src/dialog/unix/SDL_portaldialog.c",
+                "src/dialog/unix/SDL_zenitydialog.c",
+                "src/dialog/unix/SDL_zenitymessagebox.c",
+                "src/process/posix/SDL_posixprocess.c",
+                "src/video/offscreen/SDL_offscreenevents.c",
+                "src/video/offscreen/SDL_offscreenframebuffer.c",
+                "src/video/offscreen/SDL_offscreenopengles.c",
+                "src/video/offscreen/SDL_offscreenvideo.c",
+                "src/video/offscreen/SDL_offscreenvulkan.c",
+                "src/video/offscreen/SDL_offscreenwindow.c",
+                "src/gpu/vulkan/SDL_gpu_vulkan.c",
+                "src/sensor/dummy/SDL_dummysensor.c",
+                "src/main/generic/SDL_sysmain_callbacks.c",
+            },
+        });
+        if (linux_deps_values) |deps_values| {
+            sdl_mod.addCSourceFiles(.{
+                .flags = sdl_c_flags.items,
+                .root = deps_values.dependency.path("."),
+                .files = deps_values.wayland_c_files,
+            });
+        }
     }
 
     if (macos) {
