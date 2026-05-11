@@ -121,6 +121,18 @@ pub fn build(b: *std.Build) void {
                 std.process.exit(1);
             }
         },
+        .ios => {
+            ios = true;
+            const sysroot = provided_sysroot orelse b.sysroot;
+            if (sysroot) |s| {
+                system_include_path = .{ .cwd_relative = b.pathJoin(&.{ s, "usr/include" }) };
+                system_framework_path = .{ .cwd_relative = b.pathJoin(&.{ s, "System/Library/Frameworks" }) };
+                library_path = .{ .cwd_relative = "/usr/lib" }; // ???
+            } else if (!target.query.isNative()) {
+                std.log.err("'--sysroot' or '-Dapple_sysroot' is required when building SDL for iOS", .{});
+                std.process.exit(1);
+            }
+        },
         else => {},
     }
 
