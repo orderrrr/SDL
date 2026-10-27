@@ -101,35 +101,26 @@ pub fn build(b: *std.Build) void {
         },
         .macos => {
             macos = true;
-            if (b.sysroot) |sysroot| {
-                system_include_path = system_include_path orelse .{ .cwd_relative = b.pathJoin(&.{ sysroot, "usr/include" }) };
-                system_framework_path = system_framework_path orelse .{ .cwd_relative = b.pathJoin(&.{ sysroot, "System/Library/Frameworks" }) };
-                library_path = library_path orelse .{ .cwd_relative = "/usr/lib" }; // ???
-            }
             if (!target.query.isNative() and (system_include_path == null or system_framework_path == null or library_path == null)) {
-                std.log.err("'--sysroot' (or '-Dsystem_include_path', '-Dsystem_framework_path' and '-Dlibrary_path') is required when building SDL for non-native macOS targets", .{});
+                std.log.err("'-Dsystem_include_path', '-Dsystem_framework_path' and '-Dlibrary_path' are required when building SDL for non-native macOS targets", .{});
                 std.process.exit(1);
             }
         },
         .emscripten => {
             emscripten = true;
-            if (b.sysroot) |sysroot| {
-                system_include_path = system_include_path orelse .{ .cwd_relative = b.pathJoin(&.{ sysroot, "include" }) };
-            }
             if (system_include_path == null) {
-                std.log.err("'--sysroot' (or '-Dsystem_include_path') is required when building SDL for Emscripten", .{});
+                std.log.err("'-Dsystem_include_path' is required when building SDL for Emscripten", .{});
                 std.process.exit(1);
             }
         },
         .ios => {
             ios = true;
-            const sysroot = provided_sysroot orelse b.sysroot;
-            if (sysroot) |s| {
+            if (provided_sysroot) |s| {
                 system_include_path = .{ .cwd_relative = b.pathJoin(&.{ s, "usr/include" }) };
                 system_framework_path = .{ .cwd_relative = b.pathJoin(&.{ s, "System/Library/Frameworks" }) };
                 library_path = .{ .cwd_relative = "/usr/lib" }; // ???
             } else if (!target.query.isNative()) {
-                std.log.err("'--sysroot' or '-Dapple_sysroot' is required when building SDL for iOS", .{});
+                std.log.err("'-Dapple_sysroot' is required when building SDL for iOS", .{});
                 std.process.exit(1);
             }
         },
